@@ -5,35 +5,254 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Movie Recommender — Content-Based Filtering</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+:root{
+  --bg:#F6F5F1;
+  --ink:#14171C;
+  --ink-soft:#4A5058;
+  --teal:#1F6B5C;
+  --teal-deep:#0F3D34;
+  --clay:#E88A46;
+  --panel:#E4E7EE;
+  --line:#D6D3C9;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'Inter',sans-serif;
+  line-height:1.6;
+}
+header{
+  background:var(--teal-deep);
+  color:#EDEFF6;
+  padding:60px 24px 48px;
+}
+header .inner{max-width:680px;margin:0 auto;}
+header .kicker{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:13px;
+  color:var(--clay);
+  margin:0 0 16px;
+}
+header h1{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:clamp(30px,5vw,46px);
+  margin:0 0 14px;
+  color:#fff;
+}
+header .sub{color:#C9CEDE;max-width:560px;margin:0;}
+main{max-width:720px;margin:0 auto;padding:40px 24px 80px;}
+.search-box{display:flex;gap:10px;margin-bottom:10px;}
+#titleInput{
+  flex:1;
+  padding:14px 16px;
+  font-size:16px;
+  border:1px solid var(--line);
+  border-radius:4px;
+  font-family:'Inter',sans-serif;
+  background:#fff;
+}
+#titleInput:focus{outline:2px solid var(--teal);outline-offset:1px;}
+#searchBtn{
+  padding:14px 22px;
+  font-size:15px;
+  font-weight:600;
+  background:var(--teal);
+  color:#fff;
+  border:none;
+  border-radius:4px;
+  cursor:pointer;
+  transition:background 0.2s ease;
+}
+#searchBtn:hover{background:var(--teal-deep);}
+.suggestions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:24px;
+}
+.suggestions button{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:12px;
+  background:#fff;
+  border:1px solid var(--line);
+  padding:6px 11px;
+  border-radius:3px;
+  cursor:pointer;
+  color:var(--ink-soft);
+}
+.suggestions button:hover{border-color:var(--teal);color:var(--teal);}
+#status{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:13.5px;
+  color:var(--ink-soft);
+  min-height:20px;
+  margin:16px 0 8px;
+}
+#status.error{color:#B3452F;}
+.results-grid{display:flex;flex-direction:column;gap:14px;}
+.result-card{
+  background:var(--panel);
+  border-left:3px solid var(--teal);
+  padding:18px 20px;
+  border-radius:3px;
+  opacity:0;
+  transform:translateY(10px);
+  animation:fadeIn 0.4s ease forwards;
+}
+.result-card h3{font-family:'Space Grotesk',sans-serif;font-size:18px;margin:0 0 4px;}
+.result-card .genres{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--teal);margin:0 0 8px;}
+.result-card .overview{color:var(--ink-soft);font-size:14.5px;margin:0 0 10px;}
+.result-card .score{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--clay);}
+@keyframes fadeIn{to{opacity:1;transform:translateY(0);}}
+footer{text-align:center;padding:30px 24px 50px;color:var(--ink-soft);font-size:13px;}
+footer strong{color:var(--teal);}
+</style>
 </head>
 <body>
 
 <header>
-  <p class="kicker">Content-Based Filtering · TF-IDF + Cosine Similarity</p>
-  <h1>Movie Recommender</h1>
-  <p class="sub">Type a movie you like. The engine compares genres, cast, director, and keywords to find the closest matches in the catalog.</p>
+  <div class="inner">
+    <p class="kicker">Content-Based Filtering · TF-IDF + Cosine Similarity · Runs entirely in your browser</p>
+    <h1>Movie Recommender</h1>
+    <p class="sub">Type a movie you like. The engine compares genres, cast, director, and keywords to find the closest matches in the catalog — no server required.</p>
+  </div>
 </header>
 
 <main>
   <div class="search-box">
-    <input type="text" id="titleInput" list="titleList" placeholder="e.g. Inception, Parasite, Whiplash..." autocomplete="off">
-    <datalist id="titleList">
-      {% for t in titles %}
-      <option value="{{ t }}">
-      {% endfor %}
-    </datalist>
+    <input type="text" id="titleInput" placeholder="e.g. Inception, Parasite, Whiplash..." autocomplete="off">
     <button id="searchBtn">Recommend</button>
   </div>
+  <div class="suggestions" id="suggestions"></div>
 
-  <div id="status"></div>
+  <div id="status">Try one of the suggestions above, or type any title from the catalog.</div>
   <div id="results" class="results-grid"></div>
 </main>
 
 <footer>
-  <p>Built with Python, Pandas, and Scikit-learn — a content-based recommendation engine.</p>
+  <p>Built by <strong>Gayathri Jagadeesan</strong> — Python, Pandas &amp; Scikit-learn power the original version; this page is a JavaScript port of the same TF-IDF logic so it runs standalone.</p>
 </footer>
 
-<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script>
+const MOVIES = [{"title": "Inception", "genres": "Sci-Fi Thriller Action", "keywords": "dream heist subconscious corporate espionage", "cast": "Leonardo DiCaprio Joseph Gordon-Levitt Elliot Page", "director": "Christopher Nolan", "overview": "A thief who steals corporate secrets through dream-sharing technology is given a chance at redemption."}, {"title": "Interstellar", "genres": "Sci-Fi Drama Adventure", "keywords": "space time travel wormhole survival", "cast": "Matthew McConaughey Anne Hathaway Jessica Chastain", "director": "Christopher Nolan", "overview": "A team of explorers travel through a wormhole in space to ensure humanity's survival."}, {"title": "The Dark Knight", "genres": "Action Crime Drama", "keywords": "vigilante chaos moral dilemma gotham", "cast": "Christian Bale Heath Ledger Aaron Eckhart", "director": "Christopher Nolan", "overview": "Batman faces the Joker a criminal mastermind who wants to plunge Gotham into anarchy."}, {"title": "The Prestige", "genres": "Drama Mystery Thriller", "keywords": "magic rivalry obsession illusion", "cast": "Christian Bale Hugh Jackman Scarlett Johansson", "director": "Christopher Nolan", "overview": "Two rival magicians engage in a battle to create the ultimate stage illusion."}, {"title": "Memento", "genres": "Mystery Thriller", "keywords": "amnesia revenge nonlinear investigation", "cast": "Guy Pearce Carrie-Anne Moss", "director": "Christopher Nolan", "overview": "A man with short-term memory loss uses notes and tattoos to hunt his wife's killer."}, {"title": "The Matrix", "genres": "Sci-Fi Action", "keywords": "simulation rebellion hacker chosen one", "cast": "Keanu Reeves Laurence Fishburne Carrie-Anne Moss", "director": "Lana Wachowski", "overview": "A hacker discovers reality is a simulation and joins a rebellion against machines."}, {"title": "The Matrix Reloaded", "genres": "Sci-Fi Action", "keywords": "simulation rebellion prophecy machines", "cast": "Keanu Reeves Laurence Fishburne Carrie-Anne Moss", "director": "Lana Wachowski", "overview": "Neo and the rebels dig deeper into the mystery of the Matrix."}, {"title": "Blade Runner 2049", "genres": "Sci-Fi Drama Mystery", "keywords": "android identity dystopia detective", "cast": "Ryan Gosling Harrison Ford Ana de Armas", "director": "Denis Villeneuve", "overview": "A young blade runner uncovers a secret that could plunge society into chaos."}, {"title": "Arrival", "genres": "Sci-Fi Drama", "keywords": "aliens language communication linguist", "cast": "Amy Adams Jeremy Renner", "director": "Denis Villeneuve", "overview": "A linguist is recruited to communicate with alien visitors after their arrival on Earth."}, {"title": "Dune", "genres": "Sci-Fi Adventure Drama", "keywords": "desert planet prophecy politics empire", "cast": "Timothee Chalamet Zendaya Rebecca Ferguson", "director": "Denis Villeneuve", "overview": "A noble family becomes embroiled in a war for control over a desert planet's valuable resource."}, {"title": "The Shawshank Redemption", "genres": "Drama", "keywords": "prison friendship hope redemption", "cast": "Tim Robbins Morgan Freeman", "director": "Frank Darabont", "overview": "Two imprisoned men bond over years finding solace and eventual redemption."}, {"title": "The Godfather", "genres": "Crime Drama", "keywords": "mafia family power legacy", "cast": "Marlon Brando Al Pacino James Caan", "director": "Francis Ford Coppola", "overview": "The aging patriarch of an organized crime dynasty transfers control to his reluctant son."}, {"title": "Pulp Fiction", "genres": "Crime Drama", "keywords": "nonlinear hitman redemption dialogue", "cast": "John Travolta Samuel L. Jackson Uma Thurman", "director": "Quentin Tarantino", "overview": "The lives of two mob hitmen a boxer and a gangster's wife intertwine in four tales of violence."}, {"title": "Kill Bill Vol 1", "genres": "Action Crime Thriller", "keywords": "revenge assassin martial arts", "cast": "Uma Thurman David Carradine Lucy Liu", "director": "Quentin Tarantino", "overview": "A former assassin wakes from a coma and sets out for revenge against her former crew."}, {"title": "Django Unchained", "genres": "Western Drama", "keywords": "slavery bounty hunter revenge", "cast": "Jamie Foxx Christoph Waltz Leonardo DiCaprio", "director": "Quentin Tarantino", "overview": "A freed slave sets out to rescue his wife from a brutal plantation owner."}, {"title": "Whiplash", "genres": "Drama Music", "keywords": "jazz obsession mentorship ambition", "cast": "Miles Teller J.K. Simmons", "director": "Damien Chazelle", "overview": "A young drummer enrolls at a music conservatory under a ruthless instructor."}, {"title": "La La Land", "genres": "Musical Romance Drama", "keywords": "jazz ambition love hollywood", "cast": "Ryan Gosling Emma Stone", "director": "Damien Chazelle", "overview": "A jazz musician and an aspiring actress fall in love while pursuing their dreams in LA."}, {"title": "Parasite", "genres": "Thriller Drama Comedy", "keywords": "class inequality deception family", "cast": "Song Kang-ho Choi Woo-shik Park So-dam", "director": "Bong Joon-ho", "overview": "A poor family schemes to become employed by a wealthy household by infiltrating it."}, {"title": "Snowpiercer", "genres": "Sci-Fi Action Drama", "keywords": "dystopia class train survival", "cast": "Chris Evans Song Kang-ho Tilda Swinton", "director": "Bong Joon-ho", "overview": "Survivors of a frozen apocalypse live aboard a train divided by class."}, {"title": "Get Out", "genres": "Horror Mystery Thriller", "keywords": "racism hypnosis family secrets", "cast": "Daniel Kaluuya Allison Williams", "director": "Jordan Peele", "overview": "A young man uncovers a disturbing secret when he meets his white girlfriend's family."}, {"title": "Us", "genres": "Horror Thriller", "keywords": "doppelganger family survival identity", "cast": "Lupita Nyong'o Winston Duke", "director": "Jordan Peele", "overview": "A family is terrorized by a group of doppelgangers during a beach vacation."}, {"title": "The Social Network", "genres": "Drama Biography", "keywords": "startup betrayal ambition lawsuit", "cast": "Jesse Eisenberg Andrew Garfield", "director": "David Fincher", "overview": "The founding of Facebook and the resulting lawsuits between friends and business partners."}, {"title": "Fight Club", "genres": "Drama Thriller", "keywords": "identity insomnia rebellion consumerism", "cast": "Brad Pitt Edward Norton Helena Bonham Carter", "director": "David Fincher", "overview": "An insomniac office worker forms an underground fight club with a soap salesman."}, {"title": "Gone Girl", "genres": "Thriller Mystery Drama", "keywords": "marriage disappearance media manipulation", "cast": "Ben Affleck Rosamund Pike", "director": "David Fincher", "overview": "A man becomes the prime suspect when his wife disappears on their anniversary."}, {"title": "Avengers Endgame", "genres": "Action Adventure Sci-Fi", "keywords": "superhero team time travel sacrifice", "cast": "Robert Downey Jr. Chris Evans Scarlett Johansson", "director": "Anthony Russo", "overview": "The remaining Avengers assemble to reverse the damage caused by a powerful villain."}, {"title": "Guardians of the Galaxy", "genres": "Action Adventure Comedy", "keywords": "space team misfits rescue", "cast": "Chris Pratt Zoe Saldana", "director": "James Gunn", "overview": "A group of intergalactic misfits band together to save the galaxy."}, {"title": "Spider-Man Into the Spider-Verse", "genres": "Animation Action Adventure", "keywords": "multiverse superhero coming of age", "cast": "Shameik Moore Hailee Steinfeld", "director": "Bob Persichetti", "overview": "A teenager becomes Spider-Man and joins others from parallel dimensions."}, {"title": "Coco", "genres": "Animation Family Fantasy", "keywords": "family music afterlife tradition", "cast": "Anthony Gonzalez Gael Garcia Bernal", "director": "Lee Unkrich", "overview": "A boy journeys to the land of the dead to uncover his family's musical history."}, {"title": "Inside Out", "genres": "Animation Family Comedy", "keywords": "emotions childhood identity growth", "cast": "Amy Poehler Bill Hader", "director": "Pete Docter", "overview": "The emotions inside a young girl's mind navigate her move to a new city."}, {"title": "Spirited Away", "genres": "Animation Fantasy Adventure", "keywords": "spirits coming of age magic", "cast": "Rumi Hiiragi Miyu Irino", "director": "Hayao Miyazaki", "overview": "A young girl wanders into a world ruled by spirits and must find a way home."}, {"title": "The Grand Budapest Hotel", "genres": "Comedy Drama", "keywords": "hotel heist friendship whimsical", "cast": "Ralph Fiennes Tony Revolori", "director": "Wes Anderson", "overview": "A concierge and his protege become embroiled in a stolen painting mystery."}, {"title": "Knives Out", "genres": "Mystery Comedy Crime", "keywords": "family inheritance detective murder", "cast": "Daniel Craig Chris Evans Ana de Armas", "director": "Rian Johnson", "overview": "A detective investigates the death of a patriarch surrounded by a dysfunctional family."}, {"title": "Everything Everywhere All at Once", "genres": "Sci-Fi Comedy Drama", "keywords": "multiverse family identity chaos", "cast": "Michelle Yeoh Ke Huy Quan", "director": "Daniel Kwan", "overview": "An exhausted woman discovers she must connect with parallel universe versions of herself."}, {"title": "Oppenheimer", "genres": "Drama History Biography", "keywords": "science war bomb morality", "cast": "Cillian Murphy Emily Blunt Robert Downey Jr.", "director": "Christopher Nolan", "overview": "The story of scientist J. Robert Oppenheimer and his role in developing the atomic bomb."}, {"title": "The Wolf of Wall Street", "genres": "Comedy Crime Drama", "keywords": "fraud excess ambition finance", "cast": "Leonardo DiCaprio Jonah Hill", "director": "Martin Scorsese", "overview": "A stockbroker's rise and fall amid fraud and excess on Wall Street."}, {"title": "Goodfellas", "genres": "Crime Drama", "keywords": "mafia loyalty betrayal rise and fall", "cast": "Robert De Niro Ray Liotta Joe Pesci", "director": "Martin Scorsese", "overview": "The story of a young man's rise through the ranks of the mafia."}, {"title": "The Departed", "genres": "Crime Drama Thriller", "keywords": "undercover mafia identity betrayal", "cast": "Leonardo DiCaprio Matt Damon Jack Nicholson", "director": "Martin Scorsese", "overview": "An undercover cop and a mole in the police attempt to identify each other."}, {"title": "Her", "genres": "Sci-Fi Drama Romance", "keywords": "artificial intelligence loneliness love", "cast": "Joaquin Phoenix Scarlett Johansson", "director": "Spike Jonze", "overview": "A lonely writer develops an unlikely relationship with an intelligent operating system."}, {"title": "Ex Machina", "genres": "Sci-Fi Thriller Drama", "keywords": "artificial intelligence consciousness manipulation", "cast": "Domhnall Gleeson Alicia Vikander", "director": "Alex Garland", "overview": "A programmer is invited to administer a test to a humanoid AI with striking intelligence."}, {"title": "Annihilation", "genres": "Sci-Fi Horror Mystery", "keywords": "mutation expedition alien anomaly", "cast": "Natalie Portman Jennifer Jason Leigh", "director": "Alex Garland", "overview": "A biologist joins an expedition into a mysterious environmental disaster zone."}];
+
+// ---- TF-IDF + cosine similarity (JS port of recommender.py) ----
+
+function buildFeatureText(m){
+  // director repeated twice: same weighting choice as the Python version
+  return [m.genres, m.keywords, m.cast, m.director, m.director].join(' ').toLowerCase();
+}
+
+function tokenize(text){
+  return text.split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function buildTfidfVectors(docs){
+  const docTokens = docs.map(tokenize);
+  const vocab = new Set();
+  docTokens.forEach(tokens => tokens.forEach(t => vocab.add(t)));
+  const vocabList = Array.from(vocab);
+  const vocabIndex = {};
+  vocabList.forEach((w, i) => vocabIndex[w] = i);
+
+  const N = docs.length;
+  const df = new Array(vocabList.length).fill(0);
+  docTokens.forEach(tokens => {
+    const seen = new Set(tokens);
+    seen.forEach(t => df[vocabIndex[t]]++);
+  });
+  const idf = df.map(d => Math.log((1 + N) / (1 + d)) + 1);
+
+  const vectors = docTokens.map(tokens => {
+    const tf = {};
+    tokens.forEach(t => tf[t] = (tf[t] || 0) + 1);
+    const vec = new Array(vocabList.length).fill(0);
+    Object.entries(tf).forEach(([t, count]) => {
+      vec[vocabIndex[t]] = count * idf[vocabIndex[t]];
+    });
+    const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
+    return vec.map(v => v / norm);
+  });
+
+  return vectors;
+}
+
+function cosineSim(a, b){
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return dot;
+}
+
+const featureTexts = MOVIES.map(buildFeatureText);
+const vectors = buildTfidfVectors(featureTexts);
+const titleIndex = {};
+MOVIES.forEach((m, i) => titleIndex[m.title.toLowerCase()] = i);
+
+function recommend(title, topN = 5){
+  const key = title.toLowerCase().trim();
+  if (!(key in titleIndex)) return null;
+  const idx = titleIndex[key];
+  const scores = MOVIES.map((m, i) => ({ i, score: cosineSim(vectors[idx], vectors[i]) }))
+    .filter(s => s.i !== idx)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topN);
+  return scores.map(s => ({ ...MOVIES[s.i], score: Math.round(s.score * 1000) / 1000 }));
+}
+
+const input = document.getElementById('titleInput');
+const btn = document.getElementById('searchBtn');
+const status = document.getElementById('status');
+const resultsEl = document.getElementById('results');
+const suggestionsEl = document.getElementById('suggestions');
+
+const SAMPLE_TITLES = ['Inception', 'Parasite', 'Whiplash', 'The Matrix', 'Interstellar', 'Get Out'];
+SAMPLE_TITLES.forEach(t => {
+  const b = document.createElement('button');
+  b.textContent = t;
+  b.onclick = () => { input.value = t; runSearch(); };
+  suggestionsEl.appendChild(b);
+});
+
+function runSearch(){
+  const title = input.value.trim();
+  resultsEl.innerHTML = '';
+  status.className = '';
+
+  if (!title){
+    status.textContent = 'Type a movie title to get started.';
+    return;
+  }
+
+  const results = recommend(title, 5);
+
+  if (results === null){
+    status.className = 'error';
+    status.textContent = `"${title}" isn't in this sample catalog (40 movies). Try one of the suggestions above.`;
+    return;
+  }
+
+  status.textContent = `Because you liked "${title}":`;
+
+  results.forEach((movie, i) => {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+    card.style.animationDelay = `${i * 60}ms`;
+    card.innerHTML = `
+      <h3>${movie.title}</h3>
+      <p class="genres">${movie.genres}</p>
+      <p class="overview">${movie.overview}</p>
+      <p class="score">match score: ${movie.score}</p>
+    `;
+    resultsEl.appendChild(card);
+  });
+}
+
+btn.addEventListener('click', runSearch);
+input.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+</script>
+
 </body>
 </html>

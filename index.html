@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movie Recommender — Content-Based Filtering</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header>
+  <p class="kicker">Content-Based Filtering · TF-IDF + Cosine Similarity</p>
+  <h1>Movie Recommender</h1>
+  <p class="sub">Type a movie you like. The engine compares genres, cast, director, and keywords to find the closest matches in the catalog.</p>
+</header>
+
+<main>
+  <div class="search-box">
+    <input type="text" id="titleInput" list="titleList" placeholder="e.g. Inception, Parasite, Whiplash..." autocomplete="off">
+    <datalist id="titleList">
+      {% for t in titles %}
+      <option value="{{ t }}">
+      {% endfor %}
+    </datalist>
+    <button id="searchBtn">Recommend</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="results" class="results-grid"></div>
+</main>
+
+<footer>
+  <p>Built with Python, Pandas, and Scikit-learn — a content-based recommendation engine.</p>
+</footer>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
